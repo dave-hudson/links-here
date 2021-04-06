@@ -1,0 +1,19 @@
+# Don't ignore directories
+
+!*/
+
+# Ignore Mac OS/X DS_store files
+
+**/.DS_store
+
+# Ignore vim backup files
+
+**/*~
+
+# Ignore vim swp files
+
+**/*.swp
+
+# Ingore the auto-generated resources director
+
+resources/
