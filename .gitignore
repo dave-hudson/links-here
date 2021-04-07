@@ -10,6 +10,12 @@
 
 **/*~
 
+# Ignore build files
+
+src/links-here
+src/*.o
+src/*.d
+
 # Ignore vim swp files
 
 **/*.swp
