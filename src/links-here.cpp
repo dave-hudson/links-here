@@ -29,7 +29,7 @@ struct page_and_refs_cmp {
 };
 
 /*
- * Scan a front matter line.
+ * Scan a front matter line.  If we find a title then extract it.
  */
 auto scan_front_matter_line(const std::string &s, page_and_refs &par) -> void {
     if (s.substr(0, 7) != "title: ") {
@@ -40,7 +40,7 @@ auto scan_front_matter_line(const std::string &s, page_and_refs &par) -> void {
 }
 
 /*
- * Scan a markdown line.
+ * Scan a markdown line.  If we find any ref templates then record them.
  */
 auto scan_markdown_line(const std::string &s, page_and_refs &par) -> void {
     size_t start_index = 0;
@@ -71,9 +71,9 @@ auto scan_markdown_line(const std::string &s, page_and_refs &par) -> void {
 }
 
 /*
- * Collect ref codes.
+ * Scan an index.md file.
  */
-auto collect_ref_codes(const std::string &path, page_and_refs &par) -> void {
+auto scan_index_md(const std::string &path, page_and_refs &par) -> void {
     std::fstream f;
     f.open(path, std::ios::in);
     if (!f.is_open()) {
@@ -159,7 +159,7 @@ auto scan_leaf_dirs(const std::string &path, std::set<page_and_refs, page_and_re
         page_and_refs new_par;
         new_par.link_ = std::string(de->d_name);
         new_par.path_ = next_path;
-        collect_ref_codes(index_file, new_par);
+        scan_index_md(index_file, new_par);
 
         par.insert(new_par);
     }
