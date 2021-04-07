@@ -3,6 +3,7 @@
  */
 #include <iostream>
 #include <fstream>
+#include <map>
 #include <set>
 #include <vector>
 #include <string>
@@ -15,10 +16,16 @@
  * Track page refs and their paths.
  */
 struct page_and_refs {
-    std::string link_;                  // Link name
-    std::string path_;                  // Path to link
-    std::string title_;                 // Title of page
+    std::string title_;                 // Title of this page
+    std::string link_;                  // Link name of this page
+    std::string path_;                  // Path to this page
     std::set<std::string> refs_;        // Refs from this page
+};
+
+struct page_and_refs_cmp {
+    bool operator()(const page_and_refs &lhs, const page_and_refs &rhs) const {
+        return lhs.link_ < rhs.link_;
+    }
 };
 
 /*
@@ -40,8 +47,7 @@ auto scan_markdown_line(const std::string &s, page_and_refs &par) -> void {
     while (true) {
         auto open_index = s.find("{{<", start_index);
         if (open_index == std::string::npos) {
-            break;
-        }
+            break; }
 
         auto close_index = s.find(">}}", open_index + 3);
         if (close_index == std::string::npos) {
@@ -108,7 +114,7 @@ auto collect_ref_codes(const std::string &path, page_and_refs &par) -> void {
 /*
  * Scan leaf directories.
  */
-auto scan_leaf_dirs(const std::string &path, std::vector<page_and_refs> &par) -> void {
+auto scan_leaf_dirs(const std::string &path, std::set<page_and_refs, page_and_refs_cmp> &par) -> void {
     DIR *dir = opendir(path.c_str());
     if (!dir) {
         return;
@@ -155,7 +161,7 @@ auto scan_leaf_dirs(const std::string &path, std::vector<page_and_refs> &par) ->
         new_par.path_ = next_path;
         collect_ref_codes(index_file, new_par);
 
-        par.push_back(new_par);
+        par.insert(new_par);
     }
 
     closedir(dir);
@@ -164,7 +170,7 @@ auto scan_leaf_dirs(const std::string &path, std::vector<page_and_refs> &par) ->
 /*
  * Scan directories.
  */
-auto scan_dirs(const std::string &path, std::vector<page_and_refs> &par) -> void {
+auto scan_dirs(const std::string &path, std::set<page_and_refs, page_and_refs_cmp> &par) -> void {
     DIR *dir = opendir(path.c_str());
     if (!dir) {
         std::cerr << "Unable to open directory: " << path << '\n';
@@ -211,13 +217,42 @@ auto main(int argc, char **argv) -> int {
         path = ".";
     }
 
-    std::vector<page_and_refs> par;
+    /*
+     * Find all the pages and the links they reference to.
+     */
+    std::set<page_and_refs, page_and_refs_cmp> par;
     scan_dirs(path, par);
 
+    /*
+     * Scan the pages we found, check the links go somewhere and track where
+     * inbound links come from.
+     */
+    std::map<std::string, std::vector<std::string>> inbound_links;
     for (const auto &i : par) {
-        std::cout << i.link_ << "title: '" << i.title_ << "' at " << i.path_;
+        inbound_links[i.link_] = {};
+    }
+
+    bool success = true;
+    for (const auto &i : par) {
         for (const auto &j: i.refs_) {
-            std::cout << ' ' << j;
+            auto it = inbound_links.find(j);
+            if (it == inbound_links.end()) {
+                std::cerr << "Page: " << i.path_ << "/index.md - ref '" << j << "' not found\n";
+                success = false;
+            } else {
+                it->second.push_back(i.link_);
+            }
+        }
+    }
+
+    if (!success) {
+        exit(-1);
+    }
+
+    for (const auto &i : inbound_links) {
+        std::cout << "Page: " << i.first << ": ";
+        for (const auto &j: i.second) {
+            std::cout << j << ", ";
         }
         std::cout << '\n';
     }
