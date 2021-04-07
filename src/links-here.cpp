@@ -3,6 +3,7 @@
  */
 #include <iostream>
 #include <fstream>
+#include <set>
 #include <vector>
 #include <string>
 #include <cstring>
@@ -11,20 +12,59 @@
 #include <unistd.h>
 
 /*
+ * Track page refs and their paths.
+ */
+struct page_and_refs {
+    std::string link_;                  // Link name
+    std::string path_;                  // Path to link
+    std::set<std::string> refs_;        // Refs from this page
+};
+
+/*
+ * Scan a line.
+ */
+auto scan_line(const std::string &s, page_and_refs &par) -> void {
+    size_t start_index = 0;
+    while (true) {
+        auto open_index = s.find("{{<", start_index);
+        if (open_index == std::string::npos) {
+            break;
+        }
+
+        auto close_index = s.find(">}}", open_index + 3);
+        if (close_index == std::string::npos) {
+            break;
+        }
+
+        auto hugo_template = s.substr(open_index + 3, close_index - open_index - 3);
+        auto ref_index = hugo_template.find("ref ");
+        if (ref_index == std::string::npos) {
+            break;
+        }
+
+        auto link = hugo_template.substr(4);
+        link.erase(0, link.find_first_not_of(" \t"));
+        link.erase(link.find_last_not_of(" \t") + 1);
+
+        par.refs_.insert(link);
+
+        start_index = close_index + 3;
+    }
+}
+
+/*
  * Collect ref codes.
  */
-auto collect_ref_codes(const std::string &path) -> void {
+auto collect_ref_codes(const std::string &path, page_and_refs &par) -> void {
     std::fstream f;
     f.open(path, std::ios::in);
     if (!f.is_open()) {
         std::cerr << "Cannot open '" << path << "'\n";
         return;
     }
-std::cerr << "open '" << path << "'\n";
-
     std::string s;
     while (getline(f, s)) {
-        std::cout << s << '\n';
+        scan_line(s, par);
     }
 
     f.close();
@@ -33,7 +73,7 @@ std::cerr << "open '" << path << "'\n";
 /*
  * Scan leaf directories.
  */
-auto scan_leaf_dirs(const std::string &path, std::vector<std::string> &res) -> void {
+auto scan_leaf_dirs(const std::string &path, std::vector<page_and_refs> &par) -> void {
     DIR *dir = opendir(path.c_str());
     if (!dir) {
         return;
@@ -75,10 +115,12 @@ auto scan_leaf_dirs(const std::string &path, std::vector<std::string> &res) -> v
             continue;
         }
 
-        collect_ref_codes(index_file);
+        page_and_refs new_par;
+        new_par.link_ = std::string(de->d_name);
+        new_par.path_ = next_path;
+        collect_ref_codes(index_file, new_par);
 
-        std::cout << next_path << '\n';
-        res.push_back(next_path);
+        par.push_back(new_par);
     }
 
     closedir(dir);
@@ -87,9 +129,10 @@ auto scan_leaf_dirs(const std::string &path, std::vector<std::string> &res) -> v
 /*
  * Scan directories.
  */
-auto scan_dirs(const std::string &path, std::vector<std::string> &res) -> void {
+auto scan_dirs(const std::string &path, std::vector<page_and_refs> &par) -> void {
     DIR *dir = opendir(path.c_str());
     if (!dir) {
+        std::cerr << "Unable to open directory: " << path << '\n';
         return;
     }
 
@@ -115,7 +158,7 @@ auto scan_dirs(const std::string &path, std::vector<std::string> &res) -> void {
 
         auto next_path = path + '/';
         next_path.append(de->d_name);
-        scan_leaf_dirs(next_path, res);   
+        scan_leaf_dirs(next_path, par);
     }
 
     closedir(dir);
@@ -125,8 +168,25 @@ auto scan_dirs(const std::string &path, std::vector<std::string> &res) -> void {
  * Entry point.
  */
 auto main(int argc, char **argv) -> int {
-    std::vector<std::string> dirs;
-    scan_dirs("content", dirs);
+    std::string path;
+
+    if (argc == 2) {
+        path = std::string(argv[1]);
+    } else {
+        path = ".";
+    }
+
+    std::vector<page_and_refs> par;
+    scan_dirs(path, par);
+
+    for (const auto &i : par) {
+        std::cout << i.link_ << " at " << i.path_;
+        for (const auto &j: i.refs_) {
+            std::cout << ' ' << j;
+        }
+        std::cout << '\n';
+    }
+
     return 0;
 }
 

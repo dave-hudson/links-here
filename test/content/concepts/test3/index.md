@@ -5,4 +5,5 @@ frontmatter: things
 
 {{< ref test2 >}}
 {{< ref test1 >}}
+{{< ref test2 >}}
 
