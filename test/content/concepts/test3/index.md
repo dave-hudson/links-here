@@ -1,6 +1,7 @@
---
+---
 frontmatter: things
---
+title: pop goes the weasel
+---
 # Here we go!
 
 {{< ref test2 >}}

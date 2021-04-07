@@ -17,13 +17,25 @@
 struct page_and_refs {
     std::string link_;                  // Link name
     std::string path_;                  // Path to link
+    std::string title_;                 // Title of page
     std::set<std::string> refs_;        // Refs from this page
 };
 
 /*
- * Scan a line.
+ * Scan a front matter line.
  */
-auto scan_line(const std::string &s, page_and_refs &par) -> void {
+auto scan_front_matter_line(const std::string &s, page_and_refs &par) -> void {
+    if (s.substr(0, 7) != "title: ") {
+        return;
+    }
+
+    par.title_ = s.substr(7);
+}
+
+/*
+ * Scan a markdown line.
+ */
+auto scan_markdown_line(const std::string &s, page_and_refs &par) -> void {
     size_t start_index = 0;
     while (true) {
         auto open_index = s.find("{{<", start_index);
@@ -62,9 +74,32 @@ auto collect_ref_codes(const std::string &path, page_and_refs &par) -> void {
         std::cerr << "Cannot open '" << path << "'\n";
         return;
     }
+
     std::string s;
+    int phase = 0;
     while (getline(f, s)) {
-        scan_line(s, par);
+        switch (phase) {
+        case 0:                         // Find first ---
+            if (s != "---") {
+                break;
+            }
+
+            phase = 1;
+            break;
+
+        case 1:                         // Front matter
+            if (s == "---") {
+                phase = 2;
+                break;
+            }
+
+            scan_front_matter_line(s, par);
+            break;
+
+        case 2:                         // Markdown
+            scan_markdown_line(s, par);
+            break;
+        }
     }
 
     f.close();
@@ -180,7 +215,7 @@ auto main(int argc, char **argv) -> int {
     scan_dirs(path, par);
 
     for (const auto &i : par) {
-        std::cout << i.link_ << " at " << i.path_;
+        std::cout << i.link_ << "title: '" << i.title_ << "' at " << i.path_;
         for (const auto &j: i.refs_) {
             std::cout << ' ' << j;
         }
