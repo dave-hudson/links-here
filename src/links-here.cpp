@@ -204,16 +204,51 @@ auto scan_dirs(const std::string &path_prefix, std::map<std::string, page_and_re
 }
 
 /*
+ * Report the usage for this application.
+ */
+static auto usage(const char *name) -> void {
+    std::cerr << "usage: " << name << " [OPTIONS]\n\n";
+    std::cerr << "Options\n";
+    std::cerr << "  -t     Test mode (don't write files)\n";
+    std::cerr << "  -v     Verbose output (dump output file contents)\n\n";
+}
+
+/*
  * Entry point.
  */
 auto main(int argc, char **argv) -> int {
+    bool test_mode = false;
+    bool verbose_mode = false;
+
+    /*
+     * parse the command line options
+     */
+    int ch;
+    while ((ch = getopt(argc, argv, "tv?")) != -1) {
+        switch (ch) {
+        case 't':
+            test_mode = true;
+            break;
+
+        case 'v':
+            verbose_mode = true;
+            break;
+
+        case '?':
+            usage(argv[0]);
+            exit(-1);
+        }
+    }
+
     std::string path_prefix;
 
-    if (argc == 2) {
-        path_prefix = std::string(argv[1]);
+    if (optind < argc) {
+        path_prefix = std::string(argv[optind]);
     } else {
         path_prefix = ".";
     }
+
+    std::cout << argv[0] << ": scanning: " << path_prefix << '\n';
 
     /*
      * Find all the pages and the links they reference to.
@@ -251,17 +286,35 @@ auto main(int argc, char **argv) -> int {
      */
     for (const auto &i : par) {
         auto links_here_md = path_prefix + '/' + i.second.rel_path_+ "/links-here.md";
+        std::cout << "Generating: " << links_here_md << '\n';
+
+        std::string s;
+        for (const auto &j: i.second.inbound_) {
+            auto it = par.find(j);
+            s += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
+        }
+
+        /*
+         * If we're verbose the dump the file contents.
+         */
+        if (verbose_mode) {
+            std::cout << s << '\n';
+        }
+
+        /*
+         * If we're in test mode then don't write any files.
+         */
+        if (test_mode) {
+            continue;
+        }
+
         std::ofstream links_here_md_file(links_here_md);
         if (!links_here_md_file.is_open()) {
             std::cerr << "Failed to open: " << links_here_md << '\n';
             continue;
         }
 
-        for (const auto &j: i.second.inbound_) {
-            auto it = par.find(j);
-            links_here_md_file << "* [" << it->second.title_ << "](/" << it->second.rel_path_ << ")\n";
-        }
-
+        links_here_md_file << s;
         links_here_md_file.close();
     }
 
