@@ -18,7 +18,7 @@
 struct page_and_refs {
     std::string title_;                 // Title of this page
     std::string link_;                  // Link name of this page
-    std::string path_;                  // Path to this page
+    std::string rel_path_;              // Relative path to this page
     std::set<std::string> refs_;        // Refs from this page
     std::vector<std::string> inbound_;  // Inbound page links
 };
@@ -68,7 +68,8 @@ auto scan_markdown_line(const std::string &s, page_and_refs &par) -> void {
 /*
  * Scan an index.md file.
  */
-auto scan_index_md(const std::string &path, page_and_refs &par) -> void {
+auto scan_index_md(const std::string &path_prefix, const std::string &rel_path, page_and_refs &par) -> void {
+    auto path = path_prefix + '/' + rel_path;
     std::fstream f;
     f.open(path, std::ios::in);
     if (!f.is_open()) {
@@ -109,16 +110,18 @@ auto scan_index_md(const std::string &path, page_and_refs &par) -> void {
 /*
  * Scan leaf directories.
  */
-auto scan_leaf_dirs(const std::string &path, std::map<std::string, page_and_refs> &par) -> void {
+auto scan_leaf_dirs(const std::string &path_prefix, const std::string &rel_path, std::map<std::string, page_and_refs> &par) -> void {
+    auto path = path_prefix + '/' + rel_path;
     DIR *dir = opendir(path.c_str());
     if (!dir) {
+        std::cerr << "Unable to open dir: " << path << '\n';
         return;
     }
 
     dirent *de;
     while ((de = readdir(dir)) != NULL) {
         /*
-         * Skip "." and "..".
+         * Skip . and ..
          */
         if (!strcmp(de->d_name, ".")) {
             continue;
@@ -135,13 +138,14 @@ auto scan_leaf_dirs(const std::string &path, std::map<std::string, page_and_refs
             continue;
         }
 
-        auto next_path = path + '/';
+        auto next_path = rel_path + '/';
         next_path.append(de->d_name);
 
         /*
          * Ignore anything that doesn't contain an index.md file.
          */
-        auto index_file = next_path + "/index.md";
+        auto rel_index_file = next_path + "/index.md";
+        auto index_file = path_prefix + '/' + rel_index_file;
         struct stat st;
         if (stat(index_file.c_str(), &st)) {
             continue;
@@ -154,9 +158,8 @@ auto scan_leaf_dirs(const std::string &path, std::map<std::string, page_and_refs
         page_and_refs new_par;
         auto link_name = std::string(de->d_name);
         new_par.link_ = link_name;
-        new_par.path_ = next_path;
-        scan_index_md(index_file, new_par);
-
+        new_par.rel_path_ = next_path;
+        scan_index_md(path_prefix, rel_index_file, new_par);
         par.emplace(link_name, new_par);
     }
 
@@ -166,10 +169,10 @@ auto scan_leaf_dirs(const std::string &path, std::map<std::string, page_and_refs
 /*
  * Scan directories.
  */
-auto scan_dirs(const std::string &path, std::map<std::string, page_and_refs> &par) -> void {
-    DIR *dir = opendir(path.c_str());
+auto scan_dirs(const std::string &path_prefix, std::map<std::string, page_and_refs> &par) -> void {
+    DIR *dir = opendir(path_prefix.c_str());
     if (!dir) {
-        std::cerr << "Unable to open directory: " << path << '\n';
+        std::cerr << "Unable to open directory: " << path_prefix << '\n';
         return;
     }
 
@@ -193,9 +196,8 @@ auto scan_dirs(const std::string &path, std::map<std::string, page_and_refs> &pa
             continue;
         }
 
-        auto next_path = path + '/';
-        next_path.append(de->d_name);
-        scan_leaf_dirs(next_path, par);
+        std::string next_path(de->d_name);
+        scan_leaf_dirs(path_prefix, next_path, par);
     }
 
     closedir(dir);
@@ -205,19 +207,19 @@ auto scan_dirs(const std::string &path, std::map<std::string, page_and_refs> &pa
  * Entry point.
  */
 auto main(int argc, char **argv) -> int {
-    std::string path;
+    std::string path_prefix;
 
     if (argc == 2) {
-        path = std::string(argv[1]);
+        path_prefix = std::string(argv[1]);
     } else {
-        path = ".";
+        path_prefix = ".";
     }
 
     /*
      * Find all the pages and the links they reference to.
      */
     std::map<std::string, page_and_refs> par;
-    scan_dirs(path, par);
+    scan_dirs(path_prefix, par);
 
     /*
      * Scan the pages we found, check the links go somewhere and track where
@@ -230,9 +232,10 @@ auto main(int argc, char **argv) -> int {
             if (it == par.end()) {
                 std::cerr << "Page: " << i.first << "/index.md - ref '" << j << "' not found\n";
                 success = false;
-            } else {
-                it->second.inbound_.push_back(i.first);
+                continue;
             }
+
+            it->second.inbound_.push_back(i.first);
         }
     }
 
@@ -243,13 +246,23 @@ auto main(int argc, char **argv) -> int {
         exit(-1);
     }
 
+    /*
+     * We now have all the pages and all their inbound links, so write out the links-here.md files.
+     */
     for (const auto &i : par) {
-        auto it = par.find(i.first);
-        std::cout << "Page: " << i.first << " [" << it->second.title_ << "]: ";
-        for (const auto &j: i.second.inbound_) {
-            std::cout << j << ", ";
+        auto links_here_md = path_prefix + '/' + i.second.rel_path_+ "/links-here.md";
+        std::ofstream links_here_md_file(links_here_md);
+        if (!links_here_md_file.is_open()) {
+            std::cerr << "Failed to open: " << links_here_md << '\n';
+            continue;
         }
-        std::cout << '\n';
+
+        for (const auto &j: i.second.inbound_) {
+            auto it = par.find(j);
+            links_here_md_file << "* [" << it->second.title_ << "](/" << it->second.rel_path_ << ")\n";
+        }
+
+        links_here_md_file.close();
     }
 
     return 0;
