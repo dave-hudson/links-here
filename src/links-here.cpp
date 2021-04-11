@@ -290,6 +290,13 @@ auto main(int argc, char **argv) -> int {
 
         std::string s;
         for (const auto &j: i.second.inbound_) {
+            /*
+             * If we've already got an explicit reference to a page then we don't need to create one here.
+             */
+            if (i.second.refs_.find(j) != i.second.refs_.end()) {
+                continue;
+            }
+
             auto it = par.find(j);
             s += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
         }
