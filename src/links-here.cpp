@@ -31,7 +31,16 @@ auto scan_front_matter_line(const std::string &s, page_and_refs &par) -> void {
         return;
     }
 
-    par.title_ = s.substr(7);
+    /*
+     * Is the title double quoted?  If yes, we'll want to remove those.
+     */
+    auto s_size = s.size();
+    size_t quote_offs = 0;
+    if ((s[7] == '"') && (s[s_size - 1] == '"')) {
+        quote_offs = 1;
+    }
+
+    par.title_ = s.substr(7 + quote_offs, s_size - 7 - (quote_offs * 2));
 }
 
 /*
