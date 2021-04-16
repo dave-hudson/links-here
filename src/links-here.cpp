@@ -44,7 +44,7 @@ auto scan_front_matter_line(const std::string &s, page_and_refs &par) -> void {
 }
 
 /*
- * Scan a markdown line.  If we find any ref templates then record them.
+ * Scan a markdown line.  If we find any ref or note shortcodes then record them.
  */
 auto scan_markdown_line(const std::string &s, page_and_refs &par) -> void {
     size_t start_index = 0;
@@ -59,12 +59,20 @@ auto scan_markdown_line(const std::string &s, page_and_refs &par) -> void {
         }
 
         auto hugo_template = s.substr(open_index + 3, close_index - open_index - 3);
+        size_t strip_chars = 0;
         auto ref_index = hugo_template.find("ref ");
-        if (ref_index == std::string::npos) {
-            break;
+        if (ref_index != std::string::npos) {
+            strip_chars = 4;
+        } else {
+            ref_index = hugo_template.find("note ");
+            if (ref_index == std::string::npos) {
+                break;
+            }
+
+            strip_chars = 5;
         }
 
-        auto link = hugo_template.substr(4);
+        auto link = hugo_template.substr(strip_chars);
         link.erase(0, link.find_first_not_of(" \t"));
         link.erase(link.find_last_not_of(" \t") + 1);
 
@@ -284,7 +292,7 @@ auto main(int argc, char **argv) -> int {
     }
 
     /*
-     * If we didn't find files then nuke them.
+     * If we didn't find files then we're done.
      */
     if (!success) {
         exit(-1);
@@ -294,27 +302,49 @@ auto main(int argc, char **argv) -> int {
      * We now have all the pages and all their inbound links, so write out the links-here.md files.
      */
     for (const auto &i : par) {
-        auto links_here_md = path_prefix + '/' + i.second.rel_path_+ "/links-here.md";
-        std::cout << "Generating: " << links_here_md << '\n';
-
-        std::string s;
-        for (const auto &j: i.second.inbound_) {
-            /*
-             * If we've already got an explicit reference to a page then we don't need to create one here.
-             */
-            if (i.second.refs_.find(j) != i.second.refs_.end()) {
-                continue;
-            }
-
-            auto it = par.find(j);
-            s += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
+        /*
+         * We ignore anything that's not a "concepts" page.
+         */
+        if (i.second.rel_path_.compare(0, 9, "concepts/") != 0) {
+            continue;
         }
 
-        /*
-         * If we're verbose the dump the file contents.
-         */
-        if (verbose_mode) {
-            std::cout << s << '\n';
+        std::string links_here_text;
+        std::string indexed_by_text;
+        if (i.second.inbound_.size()) {
+            for (const auto &j: i.second.inbound_) {
+                /*
+                 * If we've already got an explicit reference to a page then we don't need to create one here.
+                 */
+                if (i.second.refs_.find(j) != i.second.refs_.end()) {
+                    continue;
+                }
+
+                auto it = par.find(j);
+                if (it->second.rel_path_.compare(0, 8, "indexes/") == 0) {
+                    indexed_by_text += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
+                } else {
+                    links_here_text += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
+                }
+            }
+        }
+
+        auto links_here_md_filename = path_prefix + '/' + i.second.rel_path_+ "/links-here.md";
+        if (links_here_text.size()) {
+            std::cout << "Generating: " << links_here_md_filename << '\n';
+
+            if (verbose_mode) {
+                std::cout << links_here_text << '\n';
+            }
+        }
+
+        auto indexed_by_md_filename = path_prefix + '/' + i.second.rel_path_+ "/indexed-by.md";
+        if (indexed_by_text.size()) {
+            std::cout << "Generating: " << indexed_by_md_filename << '\n';
+
+            if (verbose_mode) {
+                std::cout << indexed_by_text << '\n';
+            }
         }
 
         /*
@@ -324,14 +354,23 @@ auto main(int argc, char **argv) -> int {
             continue;
         }
 
-        std::ofstream links_here_md_file(links_here_md);
-        if (!links_here_md_file.is_open()) {
-            std::cerr << "Failed to open: " << links_here_md << '\n';
+        std::ofstream links_here_file(links_here_md_filename);
+        if (!links_here_file.is_open()) {
+            std::cerr << "Failed to open: " << links_here_md_filename << '\n';
             continue;
         }
 
-        links_here_md_file << s;
-        links_here_md_file.close();
+        links_here_file << links_here_text;
+        links_here_file.close();
+
+        std::ofstream indexed_by_file(indexed_by_md_filename);
+        if (!indexed_by_file.is_open()) {
+            std::cerr << "Failed to open: " << indexed_by_md_filename << '\n';
+            continue;
+        }
+
+        indexed_by_file << indexed_by_text;
+        indexed_by_file.close();
     }
 
     return 0;
