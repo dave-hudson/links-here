@@ -310,7 +310,6 @@ auto main(int argc, char **argv) -> int {
         }
 
         std::string links_here_text;
-        std::string indexed_by_text;
         if (i.second.inbound_.size()) {
             for (const auto &j: i.second.inbound_) {
                 /*
@@ -321,11 +320,7 @@ auto main(int argc, char **argv) -> int {
                 }
 
                 auto it = par.find(j);
-                if (it->second.rel_path_.compare(0, 8, "indexes/") == 0) {
-                    indexed_by_text += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
-                } else {
-                    links_here_text += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
-                }
+                links_here_text += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
             }
         }
 
@@ -335,15 +330,6 @@ auto main(int argc, char **argv) -> int {
 
             if (verbose_mode) {
                 std::cout << links_here_text << '\n';
-            }
-        }
-
-        auto indexed_by_md_filename = path_prefix + '/' + i.second.rel_path_+ "/indexed-by.md";
-        if (indexed_by_text.size()) {
-            std::cout << "Generating: " << indexed_by_md_filename << '\n';
-
-            if (verbose_mode) {
-                std::cout << indexed_by_text << '\n';
             }
         }
 
@@ -362,15 +348,6 @@ auto main(int argc, char **argv) -> int {
 
         links_here_file << links_here_text;
         links_here_file.close();
-
-        std::ofstream indexed_by_file(indexed_by_md_filename);
-        if (!indexed_by_file.is_open()) {
-            std::cerr << "Failed to open: " << indexed_by_md_filename << '\n';
-            continue;
-        }
-
-        indexed_by_file << indexed_by_text;
-        indexed_by_file.close();
     }
 
     return 0;
