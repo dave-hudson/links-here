@@ -310,6 +310,7 @@ auto main(int argc, char **argv) -> int {
         }
 
         std::string links_here_text;
+        std::string journal_entries_text;
         if (i.second.inbound_.size()) {
             for (const auto &j: i.second.inbound_) {
                 /*
@@ -320,7 +321,11 @@ auto main(int argc, char **argv) -> int {
                 }
 
                 auto it = par.find(j);
-                links_here_text += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
+                if (it->second.rel_path_.compare(0, 8, "journal/") == 0) {
+                    journal_entries_text += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
+                } else {
+                    links_here_text += "* [" + it->second.title_ + "](/" + it->second.rel_path_ + ")\n";
+                }
             }
         }
 
@@ -330,6 +335,15 @@ auto main(int argc, char **argv) -> int {
 
             if (verbose_mode) {
                 std::cout << links_here_text << '\n';
+            }
+        }
+
+        auto journal_entries_md_filename = path_prefix + '/' + i.second.rel_path_+ "/journal-entries.md";
+        if (journal_entries_text.size()) {
+            std::cout << "Generating: " << journal_entries_md_filename << '\n';
+
+            if (verbose_mode) {
+                std::cout << journal_entries_text << '\n';
             }
         }
 
@@ -348,6 +362,15 @@ auto main(int argc, char **argv) -> int {
 
         links_here_file << links_here_text;
         links_here_file.close();
+
+        std::ofstream journal_entries_file(journal_entries_md_filename);
+        if (!journal_entries_file.is_open()) {
+            std::cerr << "Failed to open: " << journal_entries_md_filename << '\n';
+            continue;
+        }
+
+        journal_entries_file << journal_entries_text;
+        journal_entries_file.close();
     }
 
     return 0;
